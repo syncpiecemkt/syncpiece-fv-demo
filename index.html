@@ -1,0 +1,522 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Syncpiece FV Demo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@200;400;500&family=Zen+Kaku+Gothic+New:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0e0e0e;
+    --fg: #f2f0ec;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { background: var(--bg); color: var(--fg); }
+  body {
+    font-family: "Zen Kaku Gothic New", "Inter", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* header */
+  .header {
+    position: fixed; inset: 0 0 auto 0; z-index: 20;
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 22px 3vw;
+    font-family: "Inter", sans-serif;
+  }
+  .header .logo { font-weight: 200; font-size: 26px; letter-spacing: .04em; }
+  .header nav { display: flex; gap: 5.5vw; font-size: 11px; font-weight: 500; letter-spacing: .04em; }
+
+  /* FV: スクロール量を確保するラッパーと、画面に張り付くステージ */
+  .fv-wrap { position: relative; height: 520vh; }
+  .fv {
+    position: sticky; top: 0; height: 100vh; height: 100svh;
+    overflow: hidden;
+  }
+  .fv > * { position: absolute; inset: 0; }
+  .fv-photo {
+    background: url("img/DSC086541.webp") center 60% / cover no-repeat;
+  }
+  .fv-photo::after { content: ""; position: absolute; inset: 0; background: linear-gradient(180deg, rgba(0,0,0,.35), rgba(0,0,0,.15) 40%, rgba(0,0,0,.45)); }
+  .fv-gap { background: var(--bg); }
+  .fv-collage, .fv-gl { width: 100%; height: 100%; display: block; }
+  .fv-collage { pointer-events: none; }
+
+  .fv-copy { pointer-events: none; z-index: 5; }
+  .catch {
+    position: absolute; left: 6.4vw; top: 20vh;
+    font-weight: 400; font-size: clamp(28px, 3.9vw, 58px);
+    letter-spacing: .32em; line-height: 1.6;
+  }
+  .lead {
+    position: absolute; left: 6.4vw; top: calc(20vh + clamp(28px, 3.9vw, 58px) * 3.6);
+    font-size: 13px; letter-spacing: .28em; line-height: 3.3; font-weight: 500;
+  }
+  .beyond {
+    position: absolute; left: 46vw; bottom: 9vh;
+  }
+  .beyond .label {
+    font-family: "Inter", sans-serif; font-size: 12px; font-weight: 500;
+    letter-spacing: .14em; margin-bottom: 1.2em;
+  }
+  .beyond .label span { font-family: "Zen Kaku Gothic New", sans-serif; letter-spacing: .1em; }
+  .beyond .msg {
+    font-weight: 500; font-size: clamp(20px, 2.45vw, 36px);
+    letter-spacing: .3em; line-height: 1.85;
+  }
+  .beyond .msg .l { display: block; white-space: nowrap; }
+
+  .scroll-hint {
+    position: absolute; left: 3vw; bottom: 4vh;
+    font-family: "Inter", sans-serif; font-size: 10px; letter-spacing: .3em; writing-mode: vertical-rl;
+    display: flex; align-items: center; gap: 12px;
+  }
+  .scroll-hint::after { content: ""; width: 1px; height: 56px; background: currentColor; animation: hint 2s ease-in-out infinite; transform-origin: top; }
+  @keyframes hint { 0% { transform: scaleY(0); } 50% { transform: scaleY(1); transform-origin: top; } 51% { transform-origin: bottom; } 100% { transform: scaleY(0); transform-origin: bottom; } }
+
+  /* 次セクション（つながり確認用のダミー） */
+  .next {
+    min-height: 100vh; padding: 16vh 6.4vw;
+    background: linear-gradient(180deg, #1a1a1a, #111);
+    font-family: "Inter", sans-serif;
+  }
+  .next small { font-size: 11px; letter-spacing: .2em; opacity: .7; }
+  .next h2 { margin-top: 18px; font-size: clamp(36px, 5vw, 72px); font-weight: 500; letter-spacing: .14em; line-height: 1.2; }
+
+  .debug {
+    position: fixed; right: 12px; bottom: 12px; z-index: 30; display: none;
+    font: 11px/1.4 monospace; background: rgba(0,0,0,.6); padding: 6px 8px; border-radius: 4px;
+  }
+  .is-debug .debug { display: block; }
+
+  @media (max-width: 767px) {
+    .header nav { display: none; }
+    .header .logo { font-size: 20px; }
+    .catch { top: 15vh; letter-spacing: .12em; font-size: 5.8vw; }
+    .lead { top: calc(15vh + 5.8vw * 3.8); font-size: 10.5px; letter-spacing: .08em; line-height: 2.5; }
+    .beyond { left: 6.4vw; bottom: 8vh; }
+    .beyond .msg { font-size: 5.2vw; letter-spacing: .2em; }
+  }
+</style>
+</head>
+<body>
+<header class="header">
+  <div class="logo">Syncpiece</div>
+  <nav><a>SERVICE</a><a>WORKS</a><a>COMPANY</a><a>BLOG</a><a>CONTACT</a></nav>
+</header>
+
+<main>
+  <div class="fv-wrap" id="fvWrap">
+    <section class="fv" id="fv">
+      <div class="fv-photo"></div>
+      <div class="fv-gap" id="fvGap"></div>
+      <canvas class="fv-gl" id="fvGl"></canvas>
+      <canvas class="fv-collage" id="fvCollage"></canvas>
+      <div class="fv-copy">
+        <div class="catch-wrap" id="catchWrap">
+          <h1 class="catch">その課題に<br>デザインとデジタルの力を。</h1>
+          <p class="lead">私たちは、企業が抱える課題を見つめ、<br>戦略・デザイン・デジタルを組み合わせて<br>解決へ導くクリエイティブパートナーです。<br>つくることをゴールにせず、その先の事業成長まで考えます。</p>
+        </div>
+        <div class="beyond" id="beyond">
+          <p class="label" id="beyondLabel">BEYOND PRODUCTION / <span>私たちの考え方</span></p>
+          <p class="msg" id="beyondMsg">
+            <span class="l">つくることが目的ではない。</span>
+            <span class="l">伝わること。選ばれること。</span>
+            <span class="l">その先の成果につながること。</span>
+            <span class="l">そこまで考えるデザインを。</span>
+          </p>
+        </div>
+        <div class="scroll-hint" id="scrollHint">SCROLL</div>
+      </div>
+    </section>
+  </div>
+
+  <section class="next">
+    <small>01 / FIND YOUR SOLUTION</small>
+    <h2>WHAT'S<br>YOUR<br>CHALLENGE?</h2>
+  </section>
+</main>
+<div class="debug" id="debug"></div>
+
+<script src="https://unpkg.com/lenis@1.1.13/dist/lenis.min.js"></script>
+<script>
+(() => {
+  // ---------------------------------------------------------------
+  // 設定
+  // ---------------------------------------------------------------
+  const IMG_DIR = "img/";
+  const WORKS = [
+    "bo1", "bo2", "bo3", "bo4", "miyabun", "eluxcard", "uNIQU3", "soba2", "works-logo",
+    "ay", "hinomaru", "web-contents", "banner2", "sidebanner", "meishi_youshisyurui_03_page-0001 1",
+    "web-top", "3D", "graphic-top", "web-contents2", "blogbanner"
+  ];
+  // スクロール進捗(0〜1)に対する各フェーズの区切り
+  // 0.00-0.04 コラージュ → モザイク
+  // 0.03-0.34 ばらける（破片）
+  // 0.20-0.54 砂になって流れる
+  // 0.54-0.88 砂が文字に集まる
+  // 0.86-0.95 くっきりした文字に置き換え
+  const ss = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+
+  const params = new URLSearchParams(location.search);
+  if (params.has("debug")) document.documentElement.classList.add("is-debug");
+  const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  const wrap = document.getElementById("fvWrap");
+  const fv = document.getElementById("fv");
+  const glCanvas = document.getElementById("fvGl");
+  const collageCanvas = document.getElementById("fvCollage");
+  const gapEl = document.getElementById("fvGap");
+  const catchWrap = document.getElementById("catchWrap");
+  const beyondMsg = document.getElementById("beyondMsg");
+  const beyondLabel = document.getElementById("beyondLabel");
+  const hint = document.getElementById("scrollHint");
+  const debug = document.getElementById("debug");
+
+  // 擬似乱数（リサイズ時も同じ配置になるように）
+  let seed = 7;
+  const rand = () => { seed = (seed * 16807) % 2147483647; return (seed - 1) / 2147483646; };
+
+  const loadImg = (name) => new Promise((res) => {
+    const img = new Image();
+    img.decoding = "async";
+    img.onload = () => res(img);
+    img.onerror = () => res(null);
+    img.src = IMG_DIR + encodeURIComponent(name) + ".webp";
+  });
+
+  // ---------------------------------------------------------------
+  // コラージュ生成（②のような作品の寄せ集め）
+  // ---------------------------------------------------------------
+  function drawCover(ctx, img, x, y, w, h) {
+    const ir = img.width / img.height, r = w / h;
+    let sw = img.width, sh = img.height, sx = 0, sy = 0;
+    if (ir > r) { sw = img.height * r; sx = (img.width - sw) / 2; }
+    else { sh = img.width / r; sy = (img.height - sh) / 2; }
+    ctx.drawImage(img, sx, sy, sw, sh, x, y, w, h);
+  }
+
+  function buildCollage(images, W, H, dpr) {
+    collageCanvas.width = Math.round(W * dpr);
+    collageCanvas.height = Math.round(H * dpr);
+    const ctx = collageCanvas.getContext("2d", { willReadFrequently: true });
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, W, H);
+
+    seed = 7;
+    const sp = W < 768;
+    const cols = sp ? 3 : 6;
+    const span = W * 1.3;
+    const colW = span / cols;
+    const gap = sp ? 10 : 18;
+    const aspects = [0.72, 1.4, 0.72, 1.6, 0.56, 1.25];
+    let k = 0;
+
+    ctx.save();
+    ctx.translate(W / 2, H / 2);
+    ctx.rotate(-0.08);
+    ctx.translate(-W / 2, -H / 2);
+    for (let c = 0; c < cols; c++) {
+      const x = -W * 0.15 + c * colW;
+      let y = -H * 0.35 - rand() * colW * 0.8;
+      while (y < H * 1.35) {
+        const img = images[k % images.length]; k++;
+        const a = aspects[Math.floor(rand() * aspects.length)];
+        const w = colW - gap, h = w / a;
+        if (img) {
+          ctx.save();
+          ctx.beginPath();
+          ctx.roundRect ? ctx.roundRect(x, y, w, h, 6) : ctx.rect(x, y, w, h);
+          ctx.clip();
+          // 透過のある作品画像でも粒として拾えるよう、下地を敷いて不透明にする
+          ctx.fillStyle = "#1c1c1c";
+          ctx.fillRect(x, y, w, h);
+          drawCover(ctx, img, x, y, w, h);
+          ctx.restore();
+        }
+        y += h + gap;
+      }
+    }
+    ctx.restore();
+    // ②のように作品群を少し沈ませて、キャッチを読みやすく
+    ctx.globalCompositeOperation = "source-atop";
+    ctx.fillStyle = "rgba(0,0,0,.42)";
+    ctx.fillRect(0, 0, W, H);
+    ctx.globalCompositeOperation = "source-over";
+    return ctx.getImageData(0, 0, collageCanvas.width, collageCanvas.height);
+  }
+
+  // ---------------------------------------------------------------
+  // 文字の座標を取る（DOMと同じ位置に描いて、塗られた画素を集める）
+  // ---------------------------------------------------------------
+  function sampleText(W, H) {
+    const c = document.createElement("canvas");
+    c.width = W; c.height = H;
+    const ctx = c.getContext("2d", { willReadFrequently: true });
+    ctx.fillStyle = "#fff";
+    ctx.textBaseline = "middle";
+    const fvRect = fv.getBoundingClientRect();
+    const drawLines = (els) => els.forEach((el) => {
+      const cs = getComputedStyle(el);
+      const r = el.getBoundingClientRect();
+      ctx.font = `${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`;
+      const ls = parseFloat(cs.letterSpacing) || 0;
+      let x = r.left - fvRect.left;
+      const y = r.top - fvRect.top + r.height / 2;
+      for (const ch of el.textContent.trim()) {
+        ctx.fillText(ch, x, y);
+        x += ctx.measureText(ch).width + ls;
+      }
+    });
+    drawLines([...beyondMsg.querySelectorAll(".l")]);
+    const data = ctx.getImageData(0, 0, W, H).data;
+    const pts = [];
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        if (data[(y * W + x) * 4 + 3] > 110) pts.push(x + rand() * 0.6, y + rand() * 0.6);
+      }
+    }
+    return pts;
+  }
+
+  // ---------------------------------------------------------------
+  // WebGL
+  // ---------------------------------------------------------------
+  const gl = glCanvas.getContext("webgl", { premultipliedAlpha: true, antialias: false, alpha: true });
+
+  const VS = `
+  precision highp float;
+  attribute vec2 aStart;
+  attribute vec2 aTarget;
+  attribute vec3 aColor;
+  attribute vec4 aSeed;   // r1, r2, ribbon, isText
+  attribute vec2 aChunk;  // 破片の中心
+  uniform float uP, uT, uDpr, uStep;
+  uniform vec2 uRes;
+  varying vec4 vColor;
+
+  vec2 rot(vec2 v, float a) { float c = cos(a), s = sin(a); return vec2(c * v.x - s * v.y, s * v.x + c * v.y); }
+  float hash(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
+
+  // ①のような、うねりながら流れる砂の帯
+  vec2 ribbon(float id, float u, float off) {
+    float ph = id * 37.0;
+    float x = u * 1.5 - 0.25;
+    float y = 0.5 + 0.24 * sin(x * 3.3 + ph + uT * 0.12) + 0.11 * sin(x * 7.3 + ph * 1.7 - uT * 0.09);
+    float w = 0.006 + 0.05 * pow(abs(sin(x * 2.1 + ph * 0.5 + uT * 0.05)), 2.0);
+    y += off * abs(off) * w; // 帯の中心ほど濃く
+    vec2 p = rot(vec2(x, y) - 0.5, (id - 0.5) * 1.5);
+    return p * max(uRes.x, uRes.y) + uRes * 0.5;
+  }
+
+  void main() {
+    float r1 = aSeed.x, r2 = aSeed.y;
+    float r3 = hash(aStart + 0.37);
+    float r4 = hash(aStart.yx + 1.91);
+    float isText = aSeed.w;
+    float L = max(uRes.x, uRes.y) / 1440.0;
+
+    // 1) ばらける：破片ごとに回転しながら外へ
+    float ch = hash(aChunk);
+    float pa = smoothstep(0.03 + ch * 0.10, 0.28 + ch * 0.07, uP);
+    vec2 dir = rot(normalize(aChunk - uRes * 0.5 + vec2(0.01)), (ch - 0.5) * 1.4);
+    vec2 local = rot(aStart - aChunk, pa * (ch - 0.5) * 5.0);
+    vec2 crumble = (vec2(r3, r4) - 0.5) * pa * pa * 60.0 * L;
+    vec2 pos = aChunk + local + dir * pa * pa * (140.0 + ch * 560.0) * L + vec2(0.0, -pa * 70.0 * L) + crumble;
+
+    // 2) 砂になって帯状に流れる
+    float pb = smoothstep(0.18 + r1 * 0.14, 0.42 + r1 * 0.10, uP);
+    float rid = floor(aSeed.z * 4.0) / 4.0 + 0.1;
+    float u = fract(r2 + uT * 0.006 * (0.6 + r1));
+    vec2 flow = ribbon(rid, u, (r3 + r4 - 1.0) * 1.4);
+    pos = mix(pos, flow, pb * pb * (3.0 - 2.0 * pb));
+
+    // 3) 文字へ集まる（弧を描きながら）
+    float pc = smoothstep(0.54 + r1 * 0.14, 0.76 + r1 * 0.10, uP) * isText;
+    float pd = smoothstep(0.86, 0.95, uP);
+    vec2 tgt = aTarget + vec2(sin(uT * 1.7 + r1 * 60.0), cos(uT * 1.3 + r3 * 60.0)) * 0.5 * (1.0 - pd);
+    vec2 d = tgt - pos;
+    pos = mix(pos, tgt, pc) + vec2(-d.y, d.x) * sin(pc * 3.14159) * (r4 - 0.5) * 0.5;
+
+    // 見た目：大きな色ブロック → 細かい砂
+    float size = mix(uStep + 0.6, mix(1.15, 1.5, isText), smoothstep(0.0, 0.7, pb));
+    size *= mix(1.0, 0.85, pa);
+    vec3 sand = vec3(0.93, 0.91, 0.87);
+    vec3 col = mix(aColor, sand, pb);
+    float alpha = mix(1.0, 0.6, pb);
+    alpha = mix(alpha, 0.95, pc);
+    alpha *= mix(1.0, 1.0 - pd, isText);                                  // 文字の砂は本物の文字に置き換え
+    alpha *= mix(1.0, mix(1.0, 0.28, smoothstep(0.55, 0.85, uP)), 1.0 - isText); // 残りの砂は薄く漂わせる
+
+    gl_Position = vec4(pos / uRes * 2.0 - 1.0, 0.0, 1.0) * vec4(1.0, -1.0, 1.0, 1.0);
+    gl_PointSize = size * uDpr;
+    vColor = vec4(col * alpha, alpha);
+  }`;
+
+  const FS = `
+  precision mediump float;
+  varying vec4 vColor;
+  void main() { gl_FragColor = vColor; }`;
+
+  function compile(type, src) {
+    const s = gl.createShader(type);
+    gl.shaderSource(s, src); gl.compileShader(s);
+    if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s));
+    return s;
+  }
+  let prog, buf, U = {}, count = 0, stepPx = 5;
+  if (gl) {
+    prog = gl.createProgram();
+    gl.attachShader(prog, compile(gl.VERTEX_SHADER, VS));
+    gl.attachShader(prog, compile(gl.FRAGMENT_SHADER, FS));
+    gl.linkProgram(prog);
+    gl.useProgram(prog);
+    buf = gl.createBuffer();
+    ["uP", "uT", "uDpr", "uStep", "uRes"].forEach((n) => (U[n] = gl.getUniformLocation(prog, n)));
+    gl.enable(gl.BLEND);
+    gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+  }
+  const STRIDE = 13;
+  const ATTRS = [["aStart", 2, 0], ["aTarget", 2, 2], ["aColor", 3, 4], ["aSeed", 4, 7], ["aChunk", 2, 11]];
+
+  function buildParticles(img, W, H, dpr) {
+    // 画面サイズに応じて粒の細かさを決める（PC: 約6万粒 / SP: 約2万粒）
+    const budget = W < 768 ? 24000 : 70000;
+    stepPx = Math.max(2.4,Math.sqrt((W * H * 0.8) / budget));
+    const chunk = stepPx * (W < 768 ? 5 : 7);
+    const pw = img.width, d = img.data;
+
+    const list = [];
+    for (let y = stepPx / 2; y < H; y += stepPx) {
+      for (let x = stepPx / 2; x < W; x += stepPx) {
+        const i = (Math.floor(y * dpr) * pw + Math.floor(x * dpr)) * 4;
+        if (d[i + 3] < 200) continue;
+        list.push([x, y, d[i] / 255, d[i + 1] / 255, d[i + 2] / 255]);
+      }
+    }
+    count = list.length;
+
+    const targets = sampleText(W, H);
+    const nT = targets.length / 2;
+    // 文字に使う粒をランダムに選ぶ（多すぎる時は文字側を間引く）
+    const useText = Math.min(nT, Math.floor(count * 0.6));
+    const order = list.map((_, i) => i);
+    for (let i = order.length - 1; i > 0; i--) { const j = Math.floor(rand() * (i + 1)); [order[i], order[j]] = [order[j], order[i]]; }
+    const tIdx = []; for (let i = 0; i < nT; i++) tIdx.push(i);
+    for (let i = tIdx.length - 1; i > 0; i--) { const j = Math.floor(rand() * (i + 1)); [tIdx[i], tIdx[j]] = [tIdx[j], tIdx[i]]; }
+
+    const arr = new Float32Array(count * STRIDE);
+    for (let n = 0; n < count; n++) {
+      const p = list[order[n]];
+      const o = n * STRIDE;
+      const isText = n < useText ? 1 : 0;
+      arr[o] = p[0]; arr[o + 1] = p[1];
+      if (isText) { const t = tIdx[n]; arr[o + 2] = targets[t * 2]; arr[o + 3] = targets[t * 2 + 1]; }
+      arr[o + 4] = p[2]; arr[o + 5] = p[3]; arr[o + 6] = p[4];
+      arr[o + 7] = rand(); arr[o + 8] = rand(); arr[o + 9] = rand(); arr[o + 10] = isText;
+      arr[o + 11] = Math.floor(p[0] / chunk) * chunk + chunk / 2;
+      arr[o + 12] = Math.floor(p[1] / chunk) * chunk + chunk / 2;
+    }
+    gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+    gl.bufferData(gl.ARRAY_BUFFER, arr, gl.STATIC_DRAW);
+    ATTRS.forEach(([name, size, off]) => {
+      const loc = gl.getAttribLocation(prog, name);
+      gl.enableVertexAttribArray(loc);
+      gl.vertexAttribPointer(loc, size, gl.FLOAT, false, STRIDE * 4, off * 4);
+    });
+    debugInfo = `particles ${count} / text ${useText} (of ${nT}) / step ${stepPx.toFixed(1)}px`;
+  }
+
+  // ---------------------------------------------------------------
+  // 進行
+  // ---------------------------------------------------------------
+  let images = [], W = 0, H = 0, dpr = 1, ready = false, debugInfo = "";
+  let pTarget = 0, p = 0, visible = true;
+
+  function setup() {
+    W = fv.clientWidth; H = fv.clientHeight;
+    dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const img = buildCollage(images, W, H, dpr);
+    if (gl) {
+      glCanvas.width = Math.round(W * dpr); glCanvas.height = Math.round(H * dpr);
+      gl.viewport(0, 0, glCanvas.width, glCanvas.height);
+      buildParticles(img, W, H, dpr);
+    }
+    ready = true;
+  }
+
+  function readScroll() {
+    const r = wrap.getBoundingClientRect();
+    const max = wrap.offsetHeight - window.innerHeight;
+    pTarget = Math.min(1, Math.max(0, -r.top / max));
+  }
+
+  function applyDom(p) {
+    collageCanvas.style.opacity = 1 - ss(0.0, 0.035, p);
+    gapEl.style.opacity = 1 - ss(0.03, 0.22, p);
+    // キャッチは砂が舞う間は控えめにし、最後にカンプ通りの画面に戻す
+    catchWrap.style.opacity = Math.max(0.12, 1 - ss(0.02, 0.14, p)) + ss(0.82, 0.95, p) * 0.88;
+    beyondMsg.style.opacity = ss(0.87, 0.95, p);
+    beyondLabel.style.opacity = ss(0.8, 0.92, p);
+    hint.style.opacity = 1 - ss(0.0, 0.05, p);
+  }
+
+  function frame(t) {
+    requestAnimationFrame(frame);
+    if (!ready) return;
+    p += (pTarget - p) * 0.12;
+    if (Math.abs(pTarget - p) < 0.0001) p = pTarget;
+    applyDom(p);
+    if (debug) debug.textContent = `p ${p.toFixed(3)} | ${debugInfo}`;
+    if (!gl || !visible) return;
+    gl.clearColor(0, 0, 0, 0);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+    if (p < 0.001) return; // 最初はコラージュ画像そのものを見せる
+    gl.uniform1f(U.uP, p);
+    gl.uniform1f(U.uT, t / 1000);
+    gl.uniform1f(U.uDpr, dpr);
+    gl.uniform1f(U.uStep, stepPx);
+    gl.uniform2f(U.uRes, W, H);
+    gl.drawArrays(gl.POINTS, 0, count);
+  }
+
+  async function init() {
+    if (window.Lenis && !reduceMotion) {
+      const lenis = new Lenis({ lerp: 0.09 });
+      const raf = (t) => { lenis.raf(t); requestAnimationFrame(raf); };
+      requestAnimationFrame(raf);
+      lenis.on("scroll", readScroll);
+    }
+    window.addEventListener("scroll", readScroll, { passive: true });
+    new IntersectionObserver(([e]) => (visible = e.isIntersecting)).observe(wrap);
+
+    images = (await Promise.all(WORKS.map(loadImg))).filter(Boolean);
+    await document.fonts.ready;
+
+    if (reduceMotion || !gl) {
+      // 動きを減らす設定／WebGL非対応では最終状態のみ表示
+      wrap.style.height = "100vh";
+      W = fv.clientWidth; H = fv.clientHeight; dpr = 1;
+      ready = true; pTarget = p = 1; applyDom(1);
+      return;
+    }
+    setup();
+    readScroll();
+    p = pTarget;
+    requestAnimationFrame(frame);
+
+    let rt, lastW = innerWidth;
+    window.addEventListener("resize", () => {
+      // SPのアドレスバー伸縮（高さだけの変化）では作り直さない
+      if (innerWidth === lastW) return;
+      lastW = innerWidth;
+      clearTimeout(rt); rt = setTimeout(setup, 200);
+    });
+  }
+  init();
+})();
+</script>
+</body>
+</html>
